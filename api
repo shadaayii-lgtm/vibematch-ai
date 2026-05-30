@@ -1,0 +1,151 @@
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
+
+  const { referenceImage, yourImage } = req.body;
+
+  if (!referenceImage || !yourImage) {
+    return res.status(400).json({ error: 'Both images are required.' });
+  }
+
+  const GEMINI_KEY = process.env.GEMINI_API_KEY;
+  const HF_TOKEN = process.env.HF_API_TOKEN;
+
+  if (!GEMINI_KEY || !HF_TOKEN) {
+    return res.status(500).json({ error: 'Server API keys are not configured.' });
+  }
+
+  try {
+    const geminiRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_KEY}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [
+            {
+              parts: [
+                {
+                  inline_data: {
+                    mime_type: getMediaType(referenceImage),
+                    data: stripBase64Prefix(referenceImage),
+                  },
+                },
+                {
+                  text: `You are a professional fashion stylist and photographer.
+Analyze this reference image and write a detailed image generation prompt.
+Describe ONLY:
+- Exact clothing items, colors, patterns, fabrics, and fit
+- Overall color palette and tones
+- Lighting style (natural, studio, moody, bright, etc.)
+- Background and setting
+- Pose energy and mood
+- Overall aesthetic vibe (streetwear, elegant, casual, editorial, etc.)
+
+Do NOT describe the person's face, skin, or identity.
+Write as a concise prompt under 180 words. Be very specific about fashion details.`,
+                },
+              ],
+            },
+          ],
+          generationConfig: { maxOutputTokens: 400 },
+        }),
+      }
+    );
+
+    if (!geminiRes.ok) {
+      const err = await geminiRes.json();
+      throw new Error('Gemini analysis failed: ' + (err.error?.message || 'Unknown error'));
+    }
+
+    const geminiData = await geminiRes.json();
+    const stylePrompt = geminiData.candidates[0].content.parts[0].text.trim();
+
+    const fullPrompt = stylePrompt + ', photorealistic, highly detailed, 8k, sharp focus';
+    const negativePrompt = 'deformed, ugly, blurry, low quality, changed face, different person, watermark';
+
+    const yourImageBase64 = stripBase64Prefix(yourImage);
+
+    const hfRes = await fetch(
+      'https://api-inference.huggingface.co/models/InstantX/InstantID',
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${HF_TOKEN}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          inputs: fullPrompt,
+          parameters: {
+            negative_prompt: negativePrompt,
+            num_inference_steps: 25,
+            guidance_scale: 7,
+            image: yourImageBase64,
+          },
+        }),
+      }
+    );
+
+    if (!hfRes.ok) {
+      const errText = await hfRes.text();
+      if (hfRes.status === 503) {
+        await sleep(20000);
+        const retryRes = await fetch(
+          'https://api-inference.huggingface.co/models/InstantX/InstantID',
+          {
+            method: 'POST',
+            headers: {
+              Authorization: `Bearer ${HF_TOKEN}`,
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              inputs: fullPrompt,
+              parameters: {
+                negative_prompt: negativePrompt,
+                num_inference_steps: 25,
+                guidance_scale: 7,
+                image: yourImageBase64,
+              },
+            }),
+          }
+        );
+        if (!retryRes.ok) {
+          throw new Error('Image generation failed. Please try again in a minute.');
+        }
+        const retryBuffer = await retryRes.arrayBuffer();
+        const retryBase64 = Buffer.from(retryBuffer).toString('base64');
+        return res.status(200).json({
+          outputUrl: `data:image/jpeg;base64,${retryBase64}`,
+          stylePrompt,
+        });
+      }
+      throw new Error('Image generation failed: ' + errText.slice(0, 200));
+    }
+
+    const imageBuffer = await hfRes.arrayBuffer();
+    const outputBase64 = Buffer.from(imageBuffer).toString('base64');
+
+    return res.status(200).json({
+      outputUrl: `data:image/jpeg;base64,${outputBase64}`,
+      stylePrompt,
+    });
+
+  } catch (err) {
+    console.error('Transform error:', err);
+    return res.status(500).json({ error: err.message || 'Transformation failed. Please try again.' });
+  }
+}
+
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function stripBase64Prefix(dataUrl) {
+  return dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+}
+
+function getMediaType(dataUrl) {
+  const match = dataUrl.match(/^data:([^;]+);/);
+  return match ? match[1] : 'image/jpeg';
+}
