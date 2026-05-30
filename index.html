@@ -1,0 +1,644 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VibeMatch — AI Style Transfer</title>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #C9A84C;
+      --gold-light: #F0D98A;
+      --dark: #0E0E0E;
+      --dark2: #181818;
+      --dark3: #222222;
+      --border: rgba(201,168,76,0.25);
+      --text: #F5F0E8;
+      --muted: #888;
+    }
+
+    body {
+      background: var(--dark);
+      color: var(--text);
+      font-family: 'DM Sans', sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* Ambient background effect */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -40%;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 800px;
+      background: radial-gradient(circle, rgba(201,168,76,0.06) 0%, transparent 70%);
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    header {
+      text-align: center;
+      padding: 3rem 1rem 1.5rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .logo-line {
+      font-size: 11px;
+      letter-spacing: 5px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.75rem;
+    }
+
+    h1 {
+      font-family: 'Playfair Display', serif;
+      font-size: clamp(2.2rem, 6vw, 3.8rem);
+      font-weight: 700;
+      letter-spacing: -1px;
+      line-height: 1.1;
+      background: linear-gradient(135deg, #F5F0E8 30%, #C9A84C 70%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .subtitle {
+      font-size: 15px;
+      color: var(--muted);
+      margin-top: 0.75rem;
+      font-weight: 300;
+      letter-spacing: 0.3px;
+    }
+
+    main {
+      max-width: 900px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+      position: relative;
+      z-index: 1;
+    }
+
+    .upload-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+
+    @media (max-width: 600px) {
+      .upload-grid { grid-template-columns: 1fr; }
+    }
+
+    .upload-card {
+      background: var(--dark2);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 1.5rem;
+      transition: border-color 0.3s;
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .upload-card:hover {
+      border-color: rgba(201,168,76,0.5);
+    }
+
+    .upload-card.has-image {
+      border-color: rgba(201,168,76,0.6);
+    }
+
+    .card-label {
+      font-size: 10px;
+      letter-spacing: 3px;
+      text-transform: uppercase;
+      color: var(--gold);
+      margin-bottom: 0.5rem;
+    }
+
+    .card-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.3rem;
+      margin-bottom: 0.4rem;
+    }
+
+    .card-desc {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-bottom: 1.25rem;
+    }
+
+    .drop-zone {
+      border: 1.5px dashed var(--border);
+      border-radius: 12px;
+      height: 200px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+      background: var(--dark3);
+    }
+
+    .drop-zone:hover {
+      border-color: var(--gold);
+      background: rgba(201,168,76,0.04);
+    }
+
+    .drop-zone.dragover {
+      border-color: var(--gold);
+      background: rgba(201,168,76,0.08);
+    }
+
+    .drop-zone img.preview {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      border-radius: 10px;
+    }
+
+    .drop-zone .placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+      pointer-events: none;
+    }
+
+    .drop-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 50%;
+      border: 1.5px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+    }
+
+    .drop-text {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .drop-hint {
+      font-size: 11px;
+      color: rgba(136,136,136,0.6);
+    }
+
+    .remove-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: rgba(0,0,0,0.7);
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 50%;
+      width: 28px;
+      height: 28px;
+      font-size: 14px;
+      cursor: pointer;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      z-index: 10;
+      transition: background 0.2s;
+    }
+
+    .remove-btn:hover { background: rgba(200,50,50,0.7); }
+
+    .has-image .remove-btn { display: flex; }
+
+    input[type="file"] { display: none; }
+
+    /* Divider arrow */
+    .arrow-divider {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      color: var(--gold);
+      opacity: 0.6;
+      position: absolute;
+      left: 50%;
+      top: 50%;
+      transform: translate(-50%,-50%);
+      pointer-events: none;
+    }
+
+    .upload-grid-wrapper {
+      position: relative;
+    }
+
+    /* CTA Button */
+    .start-btn {
+      display: block;
+      width: 100%;
+      max-width: 340px;
+      margin: 0 auto;
+      padding: 1rem 2rem;
+      background: linear-gradient(135deg, var(--gold) 0%, #A8862A 100%);
+      color: #0E0E0E;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 15px;
+      font-weight: 500;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      border: none;
+      border-radius: 50px;
+      cursor: pointer;
+      transition: all 0.3s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .start-btn:disabled {
+      opacity: 0.35;
+      cursor: not-allowed;
+      transform: none !important;
+    }
+
+    .start-btn:not(:disabled):hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 30px rgba(201,168,76,0.35);
+    }
+
+    .start-btn:not(:disabled):active {
+      transform: translateY(0);
+    }
+
+    /* Loading overlay */
+    #loading-overlay {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      padding: 3rem;
+      background: var(--dark2);
+      border: 1px solid var(--border);
+      border-radius: 20px;
+      margin-top: 2rem;
+      text-align: center;
+    }
+
+    #loading-overlay.active { display: flex; }
+
+    .ai-loader {
+      display: flex;
+      gap: 6px;
+      align-items: flex-end;
+      height: 36px;
+    }
+
+    .ai-loader span {
+      width: 4px;
+      background: var(--gold);
+      border-radius: 4px;
+      animation: pulse-bar 1.2s ease-in-out infinite;
+    }
+
+    .ai-loader span:nth-child(1) { animation-delay: 0s; }
+    .ai-loader span:nth-child(2) { animation-delay: 0.1s; }
+    .ai-loader span:nth-child(3) { animation-delay: 0.2s; }
+    .ai-loader span:nth-child(4) { animation-delay: 0.3s; }
+    .ai-loader span:nth-child(5) { animation-delay: 0.4s; }
+    .ai-loader span:nth-child(6) { animation-delay: 0.5s; }
+    .ai-loader span:nth-child(7) { animation-delay: 0.6s; }
+    .ai-loader span:nth-child(8) { animation-delay: 0.7s; }
+
+    @keyframes pulse-bar {
+      0%, 100% { height: 8px; opacity: 0.4; }
+      50% { height: 32px; opacity: 1; }
+    }
+
+    .loading-title {
+      font-family: 'Playfair Display', serif;
+      font-size: 1.4rem;
+    }
+
+    #loading-step {
+      font-size: 13px;
+      color: var(--gold);
+      letter-spacing: 1px;
+      min-height: 20px;
+      transition: opacity 0.5s;
+    }
+
+    .loading-sub {
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    /* Result section */
+    #result-section {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 1.5rem;
+      margin-top: 2rem;
+      animation: fade-up 0.6s ease;
+    }
+
+    #result-section.active { display: flex; }
+
+    @keyframes fade-up {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .result-label {
+      font-size: 10px;
+      letter-spacing: 4px;
+      text-transform: uppercase;
+      color: var(--gold);
+    }
+
+    .result-img {
+      width: 100%;
+      max-width: 460px;
+      border-radius: 16px;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    }
+
+    .result-actions {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .btn-outline {
+      padding: 0.6rem 1.5rem;
+      background: transparent;
+      border: 1px solid var(--border);
+      color: var(--text);
+      border-radius: 50px;
+      font-family: 'DM Sans', sans-serif;
+      font-size: 13px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .btn-outline:hover {
+      border-color: var(--gold);
+      color: var(--gold);
+    }
+
+    /* Error box */
+    #error-box {
+      display: none;
+      padding: 1rem 1.5rem;
+      background: rgba(200,50,50,0.1);
+      border: 1px solid rgba(200,50,50,0.3);
+      border-radius: 12px;
+      color: #f87171;
+      font-size: 14px;
+      margin-top: 1rem;
+      text-align: center;
+    }
+
+    #error-box.active { display: block; }
+
+    footer {
+      text-align: center;
+      padding: 2rem;
+      font-size: 12px;
+      color: rgba(136,136,136,0.5);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-line">AI Powered</div>
+  <h1>VibeMatch</h1>
+  <p class="subtitle">Upload a reference photo. Transform your look. Keep your face.</p>
+</header>
+
+<main>
+
+  <div class="upload-grid-wrapper">
+    <div class="upload-grid">
+
+      <!-- Reference Photo Card -->
+      <div class="upload-card" id="card-ref">
+        <div class="card-label">Step 1</div>
+        <div class="card-title">Reference Photo</div>
+        <p class="card-desc">The style, outfit & vibe you want to recreate.</p>
+        <div class="drop-zone" id="drop-ref" onclick="document.getElementById('file-ref').click()">
+          <div class="placeholder" id="placeholder-ref">
+            <div class="drop-icon">✦</div>
+            <div class="drop-text">Click or drag to upload</div>
+            <div class="drop-hint">JPG, PNG — Max 10MB</div>
+          </div>
+          <img class="preview" id="preview-ref" style="display:none" />
+          <button class="remove-btn" id="remove-ref" onclick="removeImage(event,'ref')">✕</button>
+        </div>
+        <input type="file" id="file-ref" accept="image/*" onchange="handleFile(event,'ref')" />
+      </div>
+
+      <!-- Your Photo Card -->
+      <div class="upload-card" id="card-you">
+        <div class="card-label">Step 2</div>
+        <div class="card-title">Your Photo</div>
+        <p class="card-desc">Your face stays — only the style changes.</p>
+        <div class="drop-zone" id="drop-you" onclick="document.getElementById('file-you').click()">
+          <div class="placeholder" id="placeholder-you">
+            <div class="drop-icon">◎</div>
+            <div class="drop-text">Click or drag to upload</div>
+            <div class="drop-hint">JPG, PNG — Max 10MB</div>
+          </div>
+          <img class="preview" id="preview-you" style="display:none" />
+          <button class="remove-btn" id="remove-you" onclick="removeImage(event,'you')">✕</button>
+        </div>
+        <input type="file" id="file-you" accept="image/*" onchange="handleFile(event,'you')" />
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Start Button -->
+  <button class="start-btn" id="start-btn" disabled onclick="startTransfer()">
+    ✦ &nbsp; Transform My Look
+  </button>
+
+  <!-- Error -->
+  <div id="error-box"></div>
+
+  <!-- Loading -->
+  <div id="loading-overlay">
+    <div class="ai-loader">
+      <span></span><span></span><span></span><span></span>
+      <span></span><span></span><span></span><span></span>
+    </div>
+    <div class="loading-title">AI is working its magic…</div>
+    <div id="loading-step">Analyzing your reference photo</div>
+    <div class="loading-sub">This usually takes 20–40 seconds</div>
+  </div>
+
+  <!-- Result -->
+  <div id="result-section">
+    <div class="result-label">✦ Your transformation</div>
+    <img class="result-img" id="result-img" src="" alt="Transformed photo" />
+    <div class="result-actions">
+      <button class="btn-outline" onclick="downloadResult()">↓ Download</button>
+      <button class="btn-outline" onclick="resetAll()">↺ Try Again</button>
+    </div>
+  </div>
+
+</main>
+
+<footer>Powered by Claude AI &amp; Replicate · Your photos are never stored.</footer>
+
+<script>
+  const state = { ref: null, you: null };
+
+  function handleFile(e, slot) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      state[slot] = ev.target.result;
+      document.getElementById('preview-' + slot).src = ev.target.result;
+      document.getElementById('preview-' + slot).style.display = 'block';
+      document.getElementById('placeholder-' + slot).style.display = 'none';
+      document.getElementById('card-' + slot).classList.add('has-image');
+      checkReady();
+    };
+    reader.readAsDataURL(file);
+  }
+
+  function removeImage(e, slot) {
+    e.stopPropagation();
+    state[slot] = null;
+    document.getElementById('preview-' + slot).style.display = 'none';
+    document.getElementById('placeholder-' + slot).style.display = 'flex';
+    document.getElementById('card-' + slot).classList.remove('has-image');
+    document.getElementById('file-' + slot).value = '';
+    checkReady();
+  }
+
+  function checkReady() {
+    document.getElementById('start-btn').disabled = !(state.ref && state.you);
+  }
+
+  // Drag and drop
+  ['ref','you'].forEach(slot => {
+    const zone = document.getElementById('drop-' + slot);
+    zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('dragover'); });
+    zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+    zone.addEventListener('drop', e => {
+      e.preventDefault();
+      zone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file && file.type.startsWith('image/')) {
+        const fakeEvent = { target: { files: [file] } };
+        handleFile(fakeEvent, slot);
+      }
+    });
+  });
+
+  const loadingSteps = [
+    'Analyzing reference photo style...',
+    'Extracting outfit & color palette...',
+    'Reading lighting and energy...',
+    'Crafting your transformation prompt...',
+    'Applying style to your photo...',
+    'Preserving your face details...',
+    'Finalizing the result...',
+  ];
+
+  async function startTransfer() {
+    hideError();
+    document.getElementById('result-section').classList.remove('active');
+    document.getElementById('loading-overlay').classList.add('active');
+    document.getElementById('start-btn').disabled = true;
+
+    // Animate loading steps
+    let stepIdx = 0;
+    const stepEl = document.getElementById('loading-step');
+    const stepInterval = setInterval(() => {
+      stepEl.style.opacity = '0';
+      setTimeout(() => {
+        stepEl.textContent = loadingSteps[stepIdx % loadingSteps.length];
+        stepEl.style.opacity = '1';
+        stepIdx++;
+      }, 400);
+    }, 3500);
+
+    try {
+      const res = await fetch('/api/transform', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ referenceImage: state.ref, yourImage: state.you })
+      });
+
+      clearInterval(stepInterval);
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Something went wrong. Please try again.');
+      }
+
+      const data = await res.json();
+      document.getElementById('loading-overlay').classList.remove('active');
+      document.getElementById('result-img').src = data.outputUrl;
+      document.getElementById('result-section').classList.add('active');
+      document.getElementById('start-btn').disabled = false;
+
+    } catch (err) {
+      clearInterval(stepInterval);
+      document.getElementById('loading-overlay').classList.remove('active');
+      document.getElementById('start-btn').disabled = false;
+      showError(err.message);
+    }
+  }
+
+  function showError(msg) {
+    const box = document.getElementById('error-box');
+    box.textContent = '⚠ ' + msg;
+    box.classList.add('active');
+  }
+
+  function hideError() {
+    document.getElementById('error-box').classList.remove('active');
+  }
+
+  async function downloadResult() {
+    const url = document.getElementById('result-img').src;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'vibematch-result.jpg';
+    a.click();
+  }
+
+  function resetAll() {
+    ['ref','you'].forEach(slot => {
+      state[slot] = null;
+      document.getElementById('preview-' + slot).style.display = 'none';
+      document.getElementById('placeholder-' + slot).style.display = 'flex';
+      document.getElementById('card-' + slot).classList.remove('has-image');
+      document.getElementById('file-' + slot).value = '';
+    });
+    document.getElementById('result-section').classList.remove('active');
+    document.getElementById('start-btn').disabled = true;
+    hideError();
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  }
+</script>
+
+</body>
+</html>
